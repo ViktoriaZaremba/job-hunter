@@ -74,7 +74,10 @@ export async function PATCH(
 
     if (updateError) throw updateError;
 
-    // Activity log: emit when canonical position changed
+    // Activity log — record ALL changes, not just position moves
+    const activityEvents: { event: string; details?: string }[] = [];
+
+    // Stage position change
     const beforeStageId: string | null = currentApp.current_stage_id ?? null;
     const beforeRejected: string | null = currentApp.rejected_at_stage_id ?? null;
     if (
@@ -84,19 +87,80 @@ export async function PATCH(
       const afterStage = pipeline.stages.find(
         (s) => s.id === result.currentStageId
       );
-      let event: string;
       if (afterStage?.type === "aggregator" && result.rejectedAtStageId) {
         const source = pipeline.stages.find(
           (s) => s.id === result.rejectedAtStageId
         );
-        event = `Marked rejected at ${source?.name ?? "?"}`;
+        activityEvents.push({ event: `Marked rejected at ${source?.name ?? "?"}` });
       } else {
-        event = `Moved to ${afterStage?.name ?? "?"}`;
+        activityEvents.push({ event: `Moved to ${afterStage?.name ?? "?"}` });
       }
-      await supabase.from("activity_log").insert({
-        application_id: id,
-        event,
-      });
+    }
+
+    // Stage substatus changes (within same stage)
+    const beforeStatuses = currentApp.stage_statuses ?? {};
+    for (const [stageId, newVal] of Object.entries(result.stageStatuses)) {
+      const oldVal = beforeStatuses[stageId] ?? null;
+      if (oldVal !== newVal && newVal !== null && newVal !== "Rejected") {
+        const stage = pipeline.stages.find((s) => s.id === stageId);
+        if (stage && stage.type === "normal") {
+          activityEvents.push({
+            event: `${stage.name} status changed`,
+            details: `${oldVal ?? "Not Started"} → ${newVal}`,
+          });
+        }
+      }
+    }
+
+    // Field changes (from patch_fields)
+    if (Object.keys(result.fieldUpdates).length > 0) {
+      const fieldLabels: Record<string, string> = {
+        rejectionReason: "Rejection reason",
+        rejectionComment: "Rejection comment",
+        hrName: "HR contact name",
+        communicationChannel: "Communication channel",
+        contactDetails: "Contact details",
+        salary: "Salary",
+        conditions: "Conditions",
+        notes: "Notes",
+        lastContactDate: "Last contact date",
+        companyName: "Company name",
+        position: "Position",
+        url: "Vacancy URL",
+      };
+
+      for (const [key, newValue] of Object.entries(result.fieldUpdates)) {
+        const label = fieldLabels[key] || key;
+        const oldValue = (currentApp as any)[
+          key.replace(/([A-Z])/g, "_$1").toLowerCase()
+        ];
+        // Only log if actually changed
+        if (oldValue !== newValue && newValue !== undefined) {
+          activityEvents.push({
+            event: `${label} updated`,
+            details: newValue
+              ? String(newValue).length > 80
+                ? String(newValue).substring(0, 80) + "..."
+                : String(newValue)
+              : "Cleared",
+          });
+        }
+      }
+    }
+
+    // Write all activity events
+    if (activityEvents.length > 0) {
+      console.log(`Activity log: writing ${activityEvents.length} events for ${id}:`, activityEvents.map(e => e.event));
+      const { error: actErr } = await supabase.from("activity_log").insert(
+        activityEvents.map((e) => ({
+          application_id: id,
+          event: e.event,
+          details: e.details ?? null,
+        }))
+      );
+      if (actErr) console.error("Activity log insert error:", actErr.message);
+    } else {
+      console.log(`Activity log: no changes detected for ${id}`);
     }
 
     return NextResponse.json({

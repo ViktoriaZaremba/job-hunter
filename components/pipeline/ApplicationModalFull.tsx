@@ -73,7 +73,7 @@ export function ApplicationModalFull({
     });
     loadActivityLog();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [application.id]);
+  }, [application.id, application.updatedAt]);
 
   const daysSinceContact = application.lastContactDate
     ? getBusinessDaysSinceContact(application.lastContactDate)
@@ -113,17 +113,19 @@ export function ApplicationModalFull({
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     // Send a combined op-style PATCH:
     //   1) set_stage_statuses with the form's per-stage map (server normalizes)
     //   2) patch_fields with the rest (rejectionReason, hrName, etc.)
-    onUpdate(application.id, {
+    await onUpdate(application.id, {
       ops: [
         { op: "set_stage_statuses", stageStatuses },
         { op: "patch_fields", fields },
       ],
     });
     setIsEditing(false);
+    // Reload activity log to show new entries
+    loadActivityLog();
   };
 
   const handleCancel = () => {
@@ -147,50 +149,47 @@ export function ApplicationModalFull({
 
   return (
     <div
-      className="fixed inset-0 bg-ink/40 backdrop-blur-sm flex items-start justify-center z-50 p-6 overflow-y-auto"
+      className="fixed inset-0 bg-ink/40 backdrop-blur-sm flex items-start justify-center z-50 p-0 sm:p-6 overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="bg-canvas rounded-3xl shadow-modal w-full max-w-[960px] my-8 overflow-hidden"
+        className="bg-canvas rounded-none sm:rounded-3xl shadow-modal w-full sm:max-w-[960px] min-h-screen sm:min-h-0 sm:my-8 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 bg-surface/90 backdrop-blur-md border-b border-line px-8 py-5 flex items-start justify-between gap-4">
+        <div className="sticky top-0 z-10 bg-surface/90 backdrop-blur-md border-b border-line px-4 sm:px-8 py-4 sm:py-5 flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-[12px] font-medium text-text-muted uppercase tracking-wider">
+            <p className="text-[11px] sm:text-[12px] font-medium text-text-muted uppercase tracking-wider">
               {canonicalLabel}
             </p>
-            <h2 className="text-h2 text-text-primary truncate mt-0.5">
+            <h2 className="text-[18px] sm:text-h2 text-text-primary truncate mt-0.5">
               {application.companyName}
             </h2>
-            <p className="text-[14px] text-text-secondary truncate">
+            <p className="text-[13px] sm:text-[14px] text-text-secondary truncate">
               {application.position}
             </p>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap justify-end">
             {isEditing ? (
               <>
-                <button onClick={handleCancel} className="btn-secondary">
-                  <XCircle size={16} />
-                  Cancel
+                <button onClick={handleCancel} className="btn-secondary text-[12px] sm:text-[14px] px-2.5 sm:px-4">
+                  <XCircle size={14} />
+                  <span className="hidden sm:inline">Cancel</span>
                 </button>
-                <button onClick={handleSave} className="btn-primary">
-                  <Save size={16} />
-                  Save
+                <button onClick={handleSave} className="btn-primary text-[12px] sm:text-[14px] px-2.5 sm:px-4">
+                  <Save size={14} />
+                  <span className="hidden sm:inline">Save</span>
                 </button>
               </>
             ) : (
               <>
                 {onDelete &&
                   (confirmDelete ? (
-                    <div className="flex items-center gap-2">
-                      <span className="text-[12px] text-text-secondary hidden sm:inline">
-                        Delete this application?
-                      </span>
+                    <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => setConfirmDelete(false)}
-                        className="btn-secondary"
+                        className="btn-secondary text-[12px] px-2.5"
                       >
                         Cancel
                       </button>
@@ -199,32 +198,30 @@ export function ApplicationModalFull({
                           onDelete(application.id);
                           onClose();
                         }}
-                        className="btn-danger"
+                        className="btn-danger text-[12px] px-2.5"
                       >
-                        <Trash2 size={16} />
-                        Delete
+                        <Trash2 size={14} />
                       </button>
                     </div>
                   ) : (
                     <button
                       onClick={() => setConfirmDelete(true)}
-                      className="btn-ghost text-text-muted hover:text-clay-500"
+                      className="btn-ghost text-text-muted hover:text-clay-500 p-2"
                       title="Delete application"
                     >
-                      <Trash2 size={16} />
-                      <span className="hidden sm:inline">Delete</span>
+                      <Trash2 size={14} />
                     </button>
                   ))}
                 <button
                   onClick={() => setIsEditing(true)}
-                  className="btn-secondary"
+                  className="btn-secondary text-[12px] sm:text-[14px] px-2.5 sm:px-4"
                 >
-                  <Edit2 size={16} />
-                  Edit
+                  <Edit2 size={14} />
+                  <span className="hidden sm:inline">Edit</span>
                 </button>
                 <button
                   onClick={onClose}
-                  className="btn-ghost h-10 w-10 p-0"
+                  className="btn-ghost h-9 w-9 p-0"
                   aria-label="Close"
                 >
                   <X size={18} />
@@ -235,10 +232,10 @@ export function ApplicationModalFull({
         </div>
 
         {/* Content */}
-        <div className="px-8 py-6 space-y-5">
+        <div className="px-4 sm:px-8 py-5 sm:py-6 space-y-4 sm:space-y-5">
           {/* Section 1 — Overview */}
           <Section title="Overview">
-            <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 sm:gap-y-5">
               <Field label="Company">
                 {isEditing ? (
                   <input
@@ -267,7 +264,7 @@ export function ApplicationModalFull({
                 )}
               </Field>
 
-              <Field label="Vacancy URL" className="col-span-2">
+              <Field label="Vacancy URL" className="sm:col-span-2">
                 {isEditing ? (
                   <input
                     type="url"
@@ -293,7 +290,7 @@ export function ApplicationModalFull({
                 )}
               </Field>
 
-              <Field label="Current Status" className="col-span-2">
+              <Field label="Current Status" className="sm:col-span-2">
                 <span
                   className={`pill ${getStatusBadgeColor(
                     application.rejectedAtStageId
@@ -338,10 +335,7 @@ export function ApplicationModalFull({
           {/* Section 2 — Pipeline (per-stage statuses) */}
           <Section title="Pipeline">
             <div
-              className="grid gap-3"
-              style={{
-                gridTemplateColumns: `repeat(${pipelineSectionStages.length}, minmax(0, 1fr))`,
-              }}
+              className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3"
             >
               {pipelineSectionStages.map((stage) => (
                 <PipelineStageCell
@@ -364,7 +358,7 @@ export function ApplicationModalFull({
           {/* Section 3 — Rejection */}
           {(isInAggregator || isEditing) && (
             <Section title="Rejection">
-              <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 sm:gap-y-5">
                 <Field label="Rejected at stage">
                   <Text>
                     {pipeline.stages.find(
@@ -408,7 +402,7 @@ export function ApplicationModalFull({
                   )}
                 </Field>
 
-                <Field label="Comment" className="col-span-2">
+                <Field label="Comment" className="sm:col-span-2">
                   {isEditing ? (
                     <textarea
                       className="input"
@@ -436,7 +430,7 @@ export function ApplicationModalFull({
 
           {/* Section 4 — Contacts */}
           <Section title="Contacts">
-            <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 sm:gap-y-5">
               <Field label="HR Name">
                 {isEditing ? (
                   <input
@@ -477,7 +471,7 @@ export function ApplicationModalFull({
                 )}
               </Field>
 
-              <Field label="Contact details" className="col-span-2">
+              <Field label="Contact details" className="sm:col-span-2">
                 {isEditing ? (
                   <input
                     className="input"
@@ -613,8 +607,8 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="card p-6">
-      <h3 className="text-[12px] font-semibold uppercase tracking-wider text-text-muted mb-5">
+    <section className="card p-4 sm:p-6">
+      <h3 className="text-[11px] sm:text-[12px] font-semibold uppercase tracking-wider text-text-muted mb-4 sm:mb-5">
         {title}
       </h3>
       {children}
@@ -674,8 +668,8 @@ function PipelineStageCell({
   onChange: (value: string | null) => void;
 }) {
   return (
-    <div className="rounded-2xl border border-line p-3.5 bg-surface">
-      <p className="text-[11px] font-medium text-text-secondary uppercase tracking-wider mb-2">
+    <div className="rounded-xl sm:rounded-2xl border border-line p-2.5 sm:p-3.5 bg-surface">
+      <p className="text-[10px] sm:text-[11px] font-medium text-text-secondary uppercase tracking-wider mb-1.5 sm:mb-2 truncate">
         {stage.name}
       </p>
       {isEditing ? (
