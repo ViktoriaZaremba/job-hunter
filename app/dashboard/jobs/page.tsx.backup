@@ -1,0 +1,357 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { Job } from "@/types";
+import { ExternalLink, Filter, Search, RefreshCw, Plus, X } from "lucide-react";
+
+export default function JobsPage() {
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [filteredJobs, setFilteredJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [scraping, setScraping] = useState(false);
+  const [showRelevantOnly, setShowRelevantOnly] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showScraperModal, setShowScraperModal] = useState(false);
+  const [companyLimit, setCompanyLimit] = useState(10);
+  const [totalCompanies, setTotalCompanies] = useState(0);
+
+  useEffect(() => {
+    fetchJobs();
+    fetchTotalCompanies();
+  }, []);
+
+  useEffect(() => {
+    filterJobs();
+  }, [jobs, showRelevantOnly, searchQuery]);
+
+  const fetchJobs = async () => {
+    try {
+      const res = await fetch("/api/jobs");
+      if (res.ok) {
+        const data = await res.json();
+        setJobs(data);
+      }
+    } catch (error) {
+      console.error("Error fetching jobs:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchTotalCompanies = async () => {
+    try {
+      const res = await fetch("/api/companies");
+      if (res.ok) {
+        const companies = await res.json();
+        setTotalCompanies(companies.length);
+      }
+    } catch (error) {
+      console.error("Error fetching companies:", error);
+    }
+  };
+
+  const startScraping = async () => {
+    setShowScraperModal(false);
+    setScraping(true);
+    
+    try {
+      // Спочатку отримаємо всі компанії
+      const companiesRes = await fetch("/api/companies");
+      if (!companiesRes.ok) {
+        alert("❌ Помилка при завантаженні компаній");
+        setScraping(false);
+        return;
+      }
+
+      const companies = await companiesRes.json();
+      
+      if (companies.length === 0) {
+        alert("❌ Немає компаній для пошуку. Спочатку імпортуйте компанії.");
+        setScraping(false);
+        return;
+      }
+
+      // Візьмемо обмежену кількість компаній
+      const limitedCompanies = companies.slice(0, companyLimit);
+      const companyIds = limitedCompanies.map((c: any) => c.id);
+
+      console.log(`🔍 Запускаємо пошук по ${companyIds.length} компаніях...`);
+
+      const res = await fetch("/api/scraper", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyIds }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        alert(`✅ Знайдено ${data.jobsFound} вакансій!\nОброблено компаній: ${data.companiesScraped}`);
+        fetchJobs();
+      } else {
+        const error = await res.json();
+        alert(`❌ Помилка: ${error.error}`);
+      }
+    } catch (error) {
+      console.error("Error scraping:", error);
+      alert("❌ Помилка при скрапінгу");
+    } finally {
+      setScraping(false);
+    }
+  };
+
+  const filterJobs = () => {
+    let filtered = jobs;
+
+    if (showRelevantOnly) {
+      filtered = filtered.filter(job => job.isRelevant);
+    }
+
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(
+        job =>
+          job.title.toLowerCase().includes(query) ||
+          job.companyName.toLowerCase().includes(query)
+      );
+    }
+
+    setFilteredJobs(filtered);
+  };
+
+  const addToApplications = async (job: Job) => {
+    try {
+      const res = await fetch("/api/applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          companyName: job.companyName,
+          position: job.title,
+          url: job.url,
+          status: "Переглядаю",
+        }),
+      });
+
+      if (res.ok) {
+        alert("✅ Додано до заявок!");
+      } else {
+        alert("❌ Помилка при додаванні");
+      }
+    } catch (error) {
+      console.error("Error adding application:", error);
+      alert("❌ Помилка при додаванні");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-xl text-gray-600">Завантаження...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold text-gray-900">
+          Знайдені вакансії
+        </h1>
+        
+        <div className="flex gap-3">
+          <button
+            onClick={fetchJobs}
+            disabled={scraping}
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition flex items-center gap-2 disabled:opacity-50"
+          >
+            <RefreshCw size={18} />
+            Оновити
+          </button>
+          <button
+            onClick={() => setShowScraperModal(true)}
+            disabled={scraping}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2 disabled:opacity-50"
+          >
+            <Search size={18} />
+            {scraping ? "Шукаємо..." : "Запустити пошук"}
+          </button>
+        </div>
+      </div>
+
+      {/* Scraper Modal */}
+      {showScraperModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+            <div className="flex justify-between items-center p-6 border-b">
+              <h2 className="text-xl font-semibold text-gray-900">
+                Налаштування пошуку
+              </h2>
+              <button
+                onClick={() => setShowScraperModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Кількість компаній для обробки
+                </label>
+                <p className="text-sm text-gray-500 mb-3">
+                  Всього в базі: {totalCompanies} компаній
+                </p>
+                <input
+                  type="number"
+                  min="1"
+                  max={totalCompanies}
+                  value={companyLimit}
+                  onChange={(e) => setCompanyLimit(Math.min(Math.max(1, parseInt(e.target.value) || 1), totalCompanies))}
+                  className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <div className="mt-3 space-y-1 text-sm text-gray-600">
+                  <div>⏱ Приблизний час: ~{Math.ceil(companyLimit * 0.5)} хвилин</div>
+                  <div className="text-xs text-gray-500">
+                    (в середньому 30 сек на компанію)
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                <h3 className="font-medium text-blue-900 mb-2">💡 Рекомендації:</h3>
+                <ul className="text-sm text-blue-800 space-y-1">
+                  <li>• <strong>10-20 компаній</strong> - швидкий тест (5-10 хв)</li>
+                  <li>• <strong>50-100 компаній</strong> - середній пошук (30-60 хв)</li>
+                  <li>• <strong>Всі компанії</strong> - повний пошук (2-4 години)</li>
+                </ul>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowScraperModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition"
+                >
+                  Скасувати
+                </button>
+                <button
+                  onClick={startScraping}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                >
+                  Почати пошук
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Filters */}
+      <div className="bg-white p-4 rounded-lg shadow mb-6">
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1">
+            <input
+              type="text"
+              placeholder="Пошук за назвою або компанією..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Filter size={20} className="text-gray-600" />
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={showRelevantOnly}
+                onChange={(e) => setShowRelevantOnly(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <span className="text-sm text-gray-700">
+                Тільки релевантні (3+ років)
+              </span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="mb-6 text-gray-600">
+        Знайдено вакансій: <strong>{filteredJobs.length}</strong> з{" "}
+        {jobs.length}
+      </div>
+
+      {/* Jobs List */}
+      <div className="space-y-4">
+        {filteredJobs.map((job) => (
+          <div
+            key={job.id}
+            className="bg-white p-6 rounded-lg shadow hover:shadow-md transition"
+          >
+            <div className="flex justify-between items-start mb-3">
+              <div className="flex-1">
+                <h3 className="text-xl font-semibold text-gray-900 mb-1">
+                  {job.title}
+                </h3>
+                <p className="text-gray-600">{job.companyName}</p>
+              </div>
+              
+              <div className="flex items-center gap-2">
+                {job.isRelevant && (
+                  <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium whitespace-nowrap">
+                    Релевантна
+                  </span>
+                )}
+                <button
+                  onClick={() => addToApplications(job)}
+                  className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition flex items-center gap-2 text-sm whitespace-nowrap"
+                  title="Додати до заявок"
+                >
+                  <Plus size={16} />
+                  Додати
+                </button>
+              </div>
+            </div>
+
+            {job.experience && (
+              <p className="text-sm text-gray-600 mb-3">
+                📊 Досвід: {job.experience}
+              </p>
+            )}
+
+            {job.description && (
+              <p className="text-sm text-gray-700 mb-3 line-clamp-2">
+                {job.description}
+              </p>
+            )}
+
+            <div className="flex justify-between items-center">
+              <a
+                href={job.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:underline flex items-center gap-2 text-sm"
+              >
+                Переглянути вакансію <ExternalLink size={16} />
+              </a>
+              
+              <p className="text-xs text-gray-500">
+                Знайдено:{" "}
+                {new Date(job.scrapedAt).toLocaleString("uk-UA")}
+              </p>
+            </div>
+          </div>
+        ))}
+
+        {filteredJobs.length === 0 && !scraping && (
+          <div className="text-center py-12 bg-white rounded-lg shadow">
+            <div className="text-gray-500 mb-4">
+              {jobs.length === 0
+                ? "Вакансій ще немає. Натисніть кнопку 'Запустити пошук' щоб знайти вакансії."
+                : "Вакансій не знайдено за вашим запитом. Спробуйте змінити фільтри."}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
