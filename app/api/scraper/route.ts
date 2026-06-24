@@ -2,14 +2,18 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import * as cheerio from "cheerio";
-import { scrapeCompanyWithAI } from "@/lib/ai-scraper";
-import { evaluateJob, keywordMatches } from "@/lib/search-filter";
+import { evaluateJob } from "@/lib/search-filter";
 import {
   getProfileForScrape,
   touchLastUsed,
 } from "@/lib/search-profiles-store";
 import { SearchProfile } from "@/types";
+import {
+  CompanyPagesSource,
+  DouSource,
+  JobCandidate,
+  SourceProgressEvent,
+} from "@/lib/sources";
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -22,16 +26,13 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { companyIds, useAI = true, profileId } = body;
+  const {
+    companyIds = [],
+    profileId,
+    sources = { companyPages: true, dou: false, djinni: false },
+  } = body;
 
-  if (!companyIds || companyIds.length === 0) {
-    return new Response(JSON.stringify({ error: "No companies specified" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-
-  // Resolve current user → profile
+  // Resolve user
   const { data: user } = await supabase
     .from("users")
     .select("id")
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // Resolve profile
   let profile: SearchProfile;
   try {
     profile = await getProfileForScrape(user.id, profileId);
@@ -62,133 +64,125 @@ export async function POST(request: NextRequest) {
       };
 
       try {
-        const { data: companies, error: companiesError } = await supabase
-          .from("companies")
-          .select("*")
-          .in("id", companyIds);
-
-        if (companiesError) throw companiesError;
-
-        const totalCompanies = companies?.length || 0;
-        let totalJobsFound = 0;
-        let companiesProcessed = 0;
-        let aiUsedCount = 0;
+        const activeSources: string[] = [];
+        if (sources.companyPages && companyIds.length > 0) activeSources.push("company");
+        if (sources.dou) activeSources.push("dou");
 
         sendEvent({
           type: "start",
-          total: totalCompanies,
+          sources: activeSources,
           profile: { id: profile.id, name: profile.name },
         });
 
-        for (const company of companies || []) {
-          try {
-            sendEvent({
-              type: "progress",
-              current: companiesProcessed + 1,
-              total: totalCompanies,
-              companyName: company.name,
-              status: "scraping",
-            });
+        let totalFound = 0;
+        let companyJobsFound = 0;
+        let douJobsFound = 0;
+        let aiFallbackUsed = 0;
 
-            // 1) Standard parser using profile's target keywords
-            let candidates = await scrapeCompanyJobs(company, profile);
+        // ========== Company Pages ==========
+        if (sources.companyPages && companyIds.length > 0) {
+          const source = new CompanyPagesSource();
 
-            // 2) AI fallback if standard returned nothing
-            if (candidates.length === 0 && useAI && process.env.OPENAI_API_KEY) {
-              sendEvent({
-                type: "progress",
-                current: companiesProcessed + 1,
-                total: totalCompanies,
-                companyName: company.name,
-                status: "ai",
-              });
-              candidates = await scrapeCompanyWithAI(
-                company.name,
-                company.careers_url,
-                profile
-              );
-              if (candidates.length > 0) aiUsedCount++;
-            }
-
-            // 3) Apply profile filter (post-extract). evaluateJob is the
-            // source of truth for both standard and AI results.
-            for (const cand of candidates) {
-              const result = evaluateJob(cand, profile);
-              if (!result.keep) continue;
-
-              let fullUrl = cand.url;
-              if (fullUrl && !fullUrl.startsWith("http")) {
-                try {
-                  const baseUrl = new URL(company.careers_url);
-                  if (fullUrl.startsWith("/")) {
-                    fullUrl = `${baseUrl.protocol}//${baseUrl.host}${fullUrl}`;
-                  } else if (fullUrl.startsWith("#")) {
-                    fullUrl = company.careers_url;
-                  }
-                } catch {
-                  fullUrl = company.careers_url;
-                }
-              }
-
-              const isRelevant = result.matchedKeywords.length > 0;
-
-              const { error: insertError } = await supabase
-                .from("jobs")
-                .upsert(
-                  {
-                    company_id: company.id,
-                    company_name: company.name,
-                    title: cand.title,
-                    url: fullUrl || company.careers_url,
-                    description: cand.description ?? "",
-                    experience: "",
-                    is_relevant: isRelevant,
-                    matched_keywords: result.matchedKeywords,
-                  },
-                  { onConflict: "url", ignoreDuplicates: false }
-                );
-
-              if (!insertError) {
-                totalJobsFound++;
+          const candidates = await source.search(
+            profile,
+            { companyIds },
+            (event: SourceProgressEvent) => {
+              if (event.type === "progress") {
                 sendEvent({
-                  type: "job_found",
-                  job: {
-                    companyName: company.name,
-                    title: cand.title,
-                    url: fullUrl || company.careers_url,
-                    matchedKeywords: result.matchedKeywords,
-                    isRelevant,
-                  },
-                  totalFound: totalJobsFound,
+                  type: "progress",
+                  source: "company",
+                  companyName: event.companyName,
+                  current: event.current,
+                  total: event.total,
+                  status: event.mode === "ai" ? "AI analysis" : "searching",
+                });
+                if (event.mode === "ai") aiFallbackUsed++;
+              } else if (event.type === "warning") {
+                sendEvent({
+                  type: "warning",
+                  source: "company",
+                  message: event.message,
                 });
               }
             }
+          );
 
-            companiesProcessed++;
-            sendEvent({
-              type: "company_complete",
-              companyName: company.name,
-              jobsFound: candidates.length,
-              current: companiesProcessed,
-              total: totalCompanies,
-            });
-          } catch (error: any) {
-            sendEvent({
-              type: "error",
-              companyName: company.name,
-              error: error.message,
-            });
+          // Filter + save
+          for (const cand of candidates) {
+            const saved = await filterAndSave(cand, profile, sendEvent);
+            if (saved) {
+              companyJobsFound++;
+              totalFound++;
+              sendEvent({
+                type: "job_found",
+                source: "company",
+                job: {
+                  companyName: cand.companyName,
+                  title: cand.title,
+                  url: cand.url,
+                },
+                totalFound,
+              });
+            }
           }
         }
 
-        // Stamp last_used_at on the profile
+        // ========== DOU ==========
+        if (sources.dou) {
+          const source = new DouSource();
+
+          let douCandidates: JobCandidate[] = [];
+          try {
+            douCandidates = await source.search(
+              profile,
+              {},
+              (event: SourceProgressEvent) => {
+                sendEvent({
+                  type: "progress",
+                  source: "dou",
+                  current: event.current,
+                  total: event.total,
+                  status: event.message || "scanning",
+                });
+              }
+            );
+          } catch (e: any) {
+            sendEvent({
+              type: "warning",
+              source: "dou",
+              message: `Failed to fetch DOU: ${e.message}`,
+            });
+          }
+
+          // Filter + save
+          for (const cand of douCandidates) {
+            const saved = await filterAndSave(cand, profile, sendEvent);
+            if (saved) {
+              douJobsFound++;
+              totalFound++;
+              sendEvent({
+                type: "job_found",
+                source: "dou",
+                job: {
+                  companyName: cand.companyName,
+                  title: cand.title,
+                  url: cand.url,
+                },
+                totalFound,
+              });
+            }
+          }
+        }
+
+        // ========== Stamp lastUsedAt ==========
         await touchLastUsed(profile.id).catch(() => {});
 
         sendEvent({
           type: "complete",
-          jobsFound: totalJobsFound,
-          companiesScraped: companiesProcessed,
-          aiUsed: aiUsedCount,
+          found: totalFound,
+          companyJobs: companyJobsFound,
+          douJobs: douJobsFound,
+          aiFallbackUsed,
         });
 
         controller.close();
@@ -209,69 +203,35 @@ export async function POST(request: NextRequest) {
 }
 
 /**
- * Standard scraper: walks all <a> on the careers page, picks the ones whose
- * link text matches a target keyword from the profile. Final filtering
- * (excluded / preferred) is applied later in evaluateJob.
+ * Run evaluateJob on a candidate, UPSERT if it passes.
+ * Returns true if the job was saved.
  */
-async function scrapeCompanyJobs(
-  company: any,
-  profile: SearchProfile
-): Promise<{ title: string; url: string; description?: string }[]> {
-  const jobs: { title: string; url: string }[] = [];
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+async function filterAndSave(
+  cand: JobCandidate,
+  profile: SearchProfile,
+  _sendEvent: (data: any) => void
+): Promise<boolean> {
+  const result = evaluateJob(
+    { title: cand.title, description: cand.description },
+    profile
+  );
+  if (!result.keep) return false;
 
-    const response = await fetch(company.careers_url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-      },
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
+  const isRelevant = result.matchedKeywords.length > 0;
 
-    if (!response.ok) return jobs;
+  const { error } = await supabase.from("jobs").upsert(
+    {
+      company_name: cand.companyName || "",
+      title: cand.title,
+      url: cand.url,
+      description: cand.description ?? "",
+      experience: "",
+      is_relevant: isRelevant,
+      matched_keywords: result.matchedKeywords,
+      source: cand.source,
+    },
+    { onConflict: "url", ignoreDuplicates: false }
+  );
 
-    const html = await response.text();
-    const $ = cheerio.load(html);
-    const allLinks = $("a").toArray();
-
-    for (const link of allLinks) {
-      const $link = $(link);
-      const text = $link.text().trim();
-      const href = $link.attr("href");
-
-      if (!text || !href) continue;
-
-      // Whole-word target match (avoids "PM" matching inside "development")
-      const hasTarget = profile.targetKeywords.some((k) =>
-        keywordMatches(text, k)
-      );
-      if (!hasTarget) continue;
-
-      let fullUrl = href;
-      if (href.startsWith("/")) {
-        try {
-          const baseUrl = new URL(company.careers_url);
-          fullUrl = `${baseUrl.protocol}//${baseUrl.host}${href}`;
-        } catch {
-          continue;
-        }
-      } else if (
-        href.startsWith("#") ||
-        href.startsWith("mailto:") ||
-        href.startsWith("tel:")
-      ) {
-        continue;
-      }
-
-      // Deduplicate
-      if (jobs.some((j) => j.url === fullUrl || j.title === text)) continue;
-      jobs.push({ title: text, url: fullUrl });
-    }
-  } catch {
-    /* swallow */
-  }
-  return jobs;
+  return !error;
 }

@@ -8,11 +8,21 @@ interface Company {
   careersUrl: string;
 }
 
+interface Sources {
+  companyPages: boolean;
+  dou: boolean;
+  djinni: boolean;
+}
+
 interface ScraperModalProps {
   companies: Company[];
   profiles: SearchProfile[];
   defaultProfileId?: string;
-  onStart: (params: { companyIds: string[]; profileId: string }) => void;
+  onStart: (params: {
+    companyIds: string[];
+    profileId: string;
+    sources: Sources;
+  }) => void;
   onCreateProfile: () => void;
   onEditProfile: (profile: SearchProfile) => void;
   onClose: () => void;
@@ -34,7 +44,11 @@ export function ScraperModal({
     "";
 
   const [profileId, setProfileId] = useState(initialProfileId);
-  const [companyLimit, setCompanyLimit] = useState(10);
+  const [sources, setSources] = useState<Sources>({
+    companyPages: true,
+    dou: true,
+    djinni: false,
+  });
   const [selectedCompanies, setSelectedCompanies] = useState<string[]>([]);
   const [showCompanySelector, setShowCompanySelector] = useState(false);
   const [companySearchQuery, setCompanySearchQuery] = useState("");
@@ -55,16 +69,16 @@ export function ScraperModal({
 
   const handleStart = () => {
     if (!profileId) return;
-    if (selectedCompanies.length > 0) {
-      onStart({ companyIds: selectedCompanies, profileId });
-    } else {
-      const companyIds = companies.slice(0, companyLimit).map((c) => c.id);
-      onStart({ companyIds, profileId });
+    const companyIds = sources.companyPages ? selectedCompanies : [];
+    if (sources.companyPages && companyIds.length === 0 && !sources.dou) {
+      return; // nothing to do
     }
+    onStart({ companyIds, profileId, sources });
   };
 
-  const willProcess =
-    selectedCompanies.length > 0 ? selectedCompanies.length : companyLimit;
+  const canStart =
+    profileId &&
+    (sources.dou || (sources.companyPages && selectedCompanies.length > 0));
 
   return (
     <div
@@ -79,7 +93,7 @@ export function ScraperModal({
           <div>
             <h2 className="text-h2">Run a search</h2>
             <p className="text-[13px] text-text-secondary mt-0.5">
-              Scan watched companies for new vacancies.
+              Scan for new vacancies using your search profile.
             </p>
           </div>
           <button onClick={onClose} className="btn-ghost h-9 w-9 p-0">
@@ -118,7 +132,6 @@ export function ScraperModal({
                   title="Edit profile"
                 >
                   <Edit2 size={14} />
-                  Edit
                 </button>
               )}
               <button
@@ -128,7 +141,6 @@ export function ScraperModal({
                 title="Create profile"
               >
                 <Plus size={14} />
-                New
               </button>
             </div>
             {currentProfile && (
@@ -140,112 +152,132 @@ export function ScraperModal({
             )}
           </div>
 
-          {/* Toggle: pick specific companies */}
-          <button
-            onClick={() => setShowCompanySelector(!showCompanySelector)}
-            className="w-full flex items-center justify-between px-4 py-3 bg-muted rounded-2xl hover:bg-muted/70 transition text-left"
-          >
-            <div>
-              <div className="text-[14px] font-medium text-text-primary">
-                {selectedCompanies.length > 0
-                  ? `${selectedCompanies.length} companies selected`
-                  : "Pick specific companies"}
-              </div>
-              <div className="text-[12px] text-text-secondary mt-0.5">
-                Optional. Skip to use the auto picker below.
-              </div>
-            </div>
-            {showCompanySelector ? (
-              <ChevronUp size={18} className="text-text-muted" />
-            ) : (
-              <ChevronDown size={18} className="text-text-muted" />
-            )}
-          </button>
-
-          {showCompanySelector && (
-            <div className="border border-line rounded-2xl p-4">
-              <div className="relative mb-3">
-                <Search
-                  size={14}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
-                />
+          {/* Sources */}
+          <div>
+            <label className="block text-[12px] font-medium text-text-secondary mb-2">
+              Sources
+            </label>
+            <div className="space-y-2">
+              <label className="flex items-center gap-3 cursor-pointer">
                 <input
-                  type="text"
-                  placeholder="Search companies..."
-                  value={companySearchQuery}
-                  onChange={(e) => setCompanySearchQuery(e.target.value)}
-                  className="input pl-9 h-9 text-[13px]"
-                />
-              </div>
-
-              <div className="max-h-60 overflow-y-auto scrollbar-thin space-y-1 pr-1">
-                {filteredCompanies.map((company) => (
-                  <label
-                    key={company.id}
-                    className="flex items-center gap-3 px-2 py-1.5 hover:bg-muted rounded-lg cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedCompanies.includes(company.id)}
-                      onChange={() => toggleCompanySelection(company.id)}
-                      className="w-4 h-4 rounded accent-ink"
-                    />
-                    <span className="text-[13px] text-text-primary">
-                      {company.name}
-                    </span>
-                  </label>
-                ))}
-              </div>
-
-              <div className="mt-3 flex gap-3 text-[12px]">
-                <button
-                  onClick={() =>
-                    setSelectedCompanies(companies.map((c) => c.id))
+                  type="checkbox"
+                  checked={sources.companyPages}
+                  onChange={(e) =>
+                    setSources({ ...sources, companyPages: e.target.checked })
                   }
-                  className="text-ink hover:text-ink-700 font-medium"
-                >
-                  Select all
-                </button>
-                <button
-                  onClick={() => setSelectedCompanies([])}
-                  className="text-text-secondary hover:text-text-primary"
-                >
-                  Reset
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Auto limit (only when nothing selected) */}
-          {selectedCompanies.length === 0 && (
-            <div>
-              <label className="block text-[12px] font-medium text-text-secondary mb-1.5">
-                Number of companies (auto pick)
+                  className="w-4 h-4 rounded accent-ink"
+                />
+                <span className="text-[14px] text-text-primary">
+                  Company career pages
+                </span>
               </label>
-              <p className="text-[12px] text-text-muted mb-2">
-                {companies.length} companies available
-              </p>
-              <input
-                type="number"
-                min={1}
-                max={companies.length}
-                value={companyLimit}
-                onChange={(e) =>
-                  setCompanyLimit(
-                    Math.min(
-                      Math.max(1, parseInt(e.target.value) || 1),
-                      companies.length
-                    )
-                  )
-                }
-                className="input"
-              />
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={sources.dou}
+                  onChange={(e) =>
+                    setSources({ ...sources, dou: e.target.checked })
+                  }
+                  className="w-4 h-4 rounded accent-ink"
+                />
+                <span className="text-[14px] text-text-primary">DOU</span>
+              </label>
+              <label className="flex items-center gap-3 cursor-not-allowed opacity-50">
+                <input
+                  type="checkbox"
+                  checked={false}
+                  disabled
+                  className="w-4 h-4 rounded"
+                />
+                <span className="text-[14px] text-text-muted">
+                  Djinni
+                  <span className="ml-2 pill bg-muted text-text-muted text-[10px]">
+                    Coming soon
+                  </span>
+                </span>
+              </label>
             </div>
-          )}
-
-          <div className="bg-muted rounded-2xl px-4 py-3 text-[12px] text-text-secondary">
-            About {Math.ceil(willProcess * 0.5)} minutes for {willProcess} companies.
           </div>
+
+          {/* Company selection — only if companyPages is on */}
+          {sources.companyPages && (
+            <>
+              <button
+                onClick={() => setShowCompanySelector(!showCompanySelector)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-muted rounded-2xl hover:bg-muted/70 transition text-left"
+              >
+                <div>
+                  <div className="text-[14px] font-medium text-text-primary">
+                    {selectedCompanies.length > 0
+                      ? `${selectedCompanies.length} companies selected`
+                      : "Select companies"}
+                  </div>
+                  <div className="text-[12px] text-text-secondary mt-0.5">
+                    Pick which companies to scan.
+                  </div>
+                </div>
+                {showCompanySelector ? (
+                  <ChevronUp size={18} className="text-text-muted" />
+                ) : (
+                  <ChevronDown size={18} className="text-text-muted" />
+                )}
+              </button>
+
+              {showCompanySelector && (
+                <div className="border border-line rounded-2xl p-4">
+                  <div className="relative mb-3">
+                    <Search
+                      size={14}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Search companies..."
+                      value={companySearchQuery}
+                      onChange={(e) => setCompanySearchQuery(e.target.value)}
+                      className="input pl-9 h-9 text-[13px]"
+                    />
+                  </div>
+
+                  <div className="max-h-60 overflow-y-auto scrollbar-thin space-y-1 pr-1">
+                    {filteredCompanies.map((company) => (
+                      <label
+                        key={company.id}
+                        className="flex items-center gap-3 px-2 py-1.5 hover:bg-muted rounded-lg cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedCompanies.includes(company.id)}
+                          onChange={() => toggleCompanySelection(company.id)}
+                          className="w-4 h-4 rounded accent-ink"
+                        />
+                        <span className="text-[13px] text-text-primary">
+                          {company.name}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="mt-3 flex gap-3 text-[12px]">
+                    <button
+                      onClick={() =>
+                        setSelectedCompanies(companies.map((c) => c.id))
+                      }
+                      className="text-ink hover:text-ink-700 font-medium"
+                    >
+                      Select all
+                    </button>
+                    <button
+                      onClick={() => setSelectedCompanies([])}
+                      className="text-text-secondary hover:text-text-primary"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
         <div className="border-t border-line px-7 py-4 flex gap-3 bg-canvas">
@@ -254,7 +286,7 @@ export function ScraperModal({
           </button>
           <button
             onClick={handleStart}
-            disabled={!profileId || profiles.length === 0}
+            disabled={!canStart}
             className="btn-primary flex-1"
           >
             <Search size={16} />

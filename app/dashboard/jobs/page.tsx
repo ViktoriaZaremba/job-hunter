@@ -73,7 +73,8 @@ export default function JobsPage() {
 
   const fetchCompanies = async () => {
     try {
-      const res = await fetch("/api/companies");
+      // For scraper modal: user's own + global pool
+      const res = await fetch("/api/companies?scope=scraper");
       if (res.ok) setCompanies(await res.json());
     } catch (error) {
       console.error("Error fetching companies:", error);
@@ -92,12 +93,14 @@ export default function JobsPage() {
   const startScraping = async ({
     companyIds,
     profileId,
+    sources,
   }: {
     companyIds: string[];
     profileId: string;
+    sources: { companyPages: boolean; dou: boolean; djinni: boolean };
   }) => {
-    if (companyIds.length === 0) {
-      alert("Select at least one company");
+    if (!sources.companyPages && !sources.dou) {
+      alert("Select at least one source");
       return;
     }
 
@@ -115,7 +118,7 @@ export default function JobsPage() {
       const res = await fetch("/api/scraper", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ companyIds, profileId, useAI: true }),
+        body: JSON.stringify({ companyIds, profileId, sources }),
       });
 
       if (!res.ok) {
@@ -525,6 +528,12 @@ function JobCard({
   const matched = job.matchedKeywords ?? [];
   const isRelevant = matched.length > 0 || job.isRelevant;
 
+  const sourceLabel: Record<string, string> = {
+    company: "Career page",
+    dou: "DOU",
+    djinni: "Djinni",
+  };
+
   const handleAdd = async () => {
     if (added || busy) return;
     setBusy(true);
@@ -564,6 +573,11 @@ function JobCard({
 
         {isRelevant && (
           <RelevantBadge matched={matched} />
+        )}
+        {job.source && job.source !== "company" && (
+          <span className="pill bg-ink-50 text-ink-600 shrink-0 text-[11px]">
+            {sourceLabel[job.source] ?? job.source}
+          </span>
         )}
       </div>
 
@@ -639,6 +653,8 @@ function JobCard({
           month: "short",
           year: "numeric",
         })}
+        {" · "}
+        {sourceLabel[job.source] ?? "Career page"}
       </p>
     </div>
   );

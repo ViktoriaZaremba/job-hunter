@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
       scrapedAt: job.scraped_at,
       isRelevant: job.is_relevant,
       matchedKeywords: job.matched_keywords ?? undefined,
+      source: job.source ?? "company",
     }));
 
     return NextResponse.json(transformedJobs || []);

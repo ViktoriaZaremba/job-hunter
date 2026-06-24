@@ -119,8 +119,14 @@ export function computeFunnel(
   pipeline: Pipeline
 ): FunnelStep[] {
   const k = computeKpis(applications, pipeline);
+  const resume = findStageByName(pipeline, "Resume");
+  const reachedResume = resume
+    ? applications.filter((app) => reachedStage(app, resume, pipeline)).length
+    : 0;
+
   const steps: { label: string; count: number }[] = [
     { label: "Applications", count: k.total },
+    { label: "Resume", count: reachedResume },
     { label: "HR Interviews", count: k.reachedHR },
     { label: "Technical Interviews", count: k.reachedTech },
     { label: "Final Interviews", count: k.reachedFinal },

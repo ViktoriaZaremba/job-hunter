@@ -73,18 +73,18 @@ export default function AnalyticsPage() {
   const empty = applications.length === 0;
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-10">
-      <div className="mb-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
+      <div className="mb-6 sm:mb-8">
         <h1 className="text-h1">Analytics</h1>
-        <p className="text-text-secondary mt-1">
-          Every number is computed in your browser. Hover any value to see how.
+        <p className="text-text-secondary mt-1 text-[13px] sm:text-[14px]">
+          Every number is computed in your browser. Tap any value to see how.
         </p>
       </div>
 
       {empty ? (
         <EmptyState />
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-4 sm:space-y-6">
           <KpiSection kpis={kpis} />
           <FunnelSection funnel={funnel} />
           <TimingSection response={responseTime} duration={processDuration} />
@@ -105,7 +105,7 @@ export default function AnalyticsPage() {
 
 function KpiSection({ kpis }: { kpis: KpiCounts }) {
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4">
       <KpiCard
         label="Applications"
         value={kpis.total}
@@ -173,11 +173,11 @@ function KpiCard({
   const valueColor = accent === "teal" ? "text-teal-600" : "text-text-primary";
   return (
     <InfoTooltip content={tooltip}>
-      <div className="card p-5 w-full cursor-help">
-        <p className={`text-[28px] font-semibold tracking-tight ${valueColor}`}>
+      <div className="card p-3 sm:p-5 w-full cursor-help">
+        <p className={`text-[22px] sm:text-[28px] font-semibold tracking-tight ${valueColor}`}>
           {value}
         </p>
-        <p className="text-[12px] font-medium text-text-secondary uppercase tracking-wider mt-1">
+        <p className="text-[10px] sm:text-[12px] font-medium text-text-secondary uppercase tracking-wider mt-1">
           {label}
         </p>
       </div>
@@ -192,64 +192,75 @@ function KpiCard({
 function FunnelSection({ funnel }: { funnel: FunnelStep[] }) {
   return (
     <Section title="Conversion funnel" icon={<BarChart3 size={14} />}>
-      <div className="space-y-3">
-        {funnel.map((step, i) => (
-          <div key={step.label}>
-            {i > 0 && step.fromPrevious && (
-              <div className="flex items-center justify-center my-1">
-                <InfoTooltip
-                  content={
-                    <TooltipBody
-                      title={`${step.fromPrevious.fromLabel} → ${step.label}`}
-                      description={`How many ${step.fromPrevious.fromLabel.toLowerCase()} progressed to ${step.label.toLowerCase()}.`}
-                      formula={`${step.label} ÷ ${step.fromPrevious.fromLabel} × 100`}
-                      values={[
-                        { label: step.label, value: step.fromPrevious.numerator },
-                        {
-                          label: step.fromPrevious.fromLabel,
-                          value: step.fromPrevious.denominator,
-                        },
-                      ]}
-                      result={fmtPct(step.fromPrevious.pct)}
-                    />
-                  }
-                >
-                  <span className="inline-flex items-center gap-1.5 text-[12px] text-text-secondary cursor-help">
-                    <ArrowDown size={12} />
-                    {fmtPct(step.fromPrevious.pct)}
-                  </span>
-                </InfoTooltip>
-              </div>
-            )}
-
-            <FunnelRow step={step} />
-          </div>
+      <div className="divide-y divide-line">
+        {funnel.map((step) => (
+          <FunnelStepRow key={step.label} step={step} />
         ))}
       </div>
     </Section>
   );
 }
 
-function FunnelRow({ step }: { step: FunnelStep }) {
+function FunnelStepRow({ step }: { step: FunnelStep }) {
+  const tooltip = step.fromPrevious ? (
+    <TooltipBody
+      title={`${step.fromPrevious.fromLabel} → ${step.label}`}
+      description={`How many ${step.fromPrevious.fromLabel.toLowerCase()} progressed to ${step.label.toLowerCase()}.`}
+      formula={`${step.label} ÷ ${step.fromPrevious.fromLabel} × 100`}
+      values={[
+        { label: step.label, value: step.fromPrevious.numerator },
+        { label: step.fromPrevious.fromLabel, value: step.fromPrevious.denominator },
+      ]}
+      result={fmtPct(step.fromPrevious.pct)}
+    />
+  ) : (
+    <TooltipBody
+      title={step.label}
+      description={`Total number of ${step.label.toLowerCase()}.`}
+      values={[{ label: "Count", value: step.count }]}
+    />
+  );
+
   return (
-    <InfoTooltip
-      content={
-        <TooltipBody
-          title={step.label}
-          description={`Number of applications that reached ${step.label.toLowerCase()}.`}
-          values={[{ label: "Count", value: step.count }]}
-        />
-      }
-    >
-      <div className="card p-4 w-full flex items-center justify-between gap-4 cursor-help">
-        <span className="text-[14px] font-medium text-text-primary">
-          {step.label}
-        </span>
-        <span className="text-[18px] font-semibold text-text-primary tabular-nums">
-          {step.count}
-        </span>
-      </div>
-    </InfoTooltip>
+    <div className="py-4 cursor-help hover:bg-muted/40 -mx-2 px-2 rounded-lg transition">
+      <InfoTooltip content={tooltip}>
+        {/* Desktop: single row */}
+        <div className="hidden sm:flex items-center gap-3 w-full">
+          <span className="text-[14px] font-medium text-text-primary flex-1">
+            {step.label}
+          </span>
+          <span className="text-[18px] font-bold text-text-primary tabular-nums">
+            {step.count}
+          </span>
+          {step.fromPrevious ? (
+            <span className="flex items-center gap-1 text-[13px] text-text-muted w-20 justify-end whitespace-nowrap">
+              <ArrowDown size={11} />
+              {fmtPct(step.fromPrevious.pct)}
+            </span>
+          ) : (
+            <span className="w-20" />
+          )}
+        </div>
+
+        {/* Mobile: two lines */}
+        <div className="block sm:hidden w-full">
+          <p className="text-[15px] font-medium text-text-primary leading-snug">
+            {step.label}
+          </p>
+          <div className="flex items-center justify-between mt-2">
+            <span className="text-[22px] font-bold text-text-primary tabular-nums">
+              {step.count}
+            </span>
+            {step.fromPrevious && (
+              <span className="flex items-center gap-1 text-[13px] text-text-muted whitespace-nowrap">
+                <ArrowDown size={11} />
+                {fmtPct(step.fromPrevious.pct)}
+              </span>
+            )}
+          </div>
+        </div>
+      </InfoTooltip>
+    </div>
   );
 }
 
@@ -265,7 +276,7 @@ function TimingSection({
   duration: TimeMetric;
 }) {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
       <TimeCard
         label="Average response time"
         value={fmtDays(response.averageDays)}
@@ -319,11 +330,11 @@ function TimeCard({
 }) {
   return (
     <InfoTooltip content={tooltip}>
-      <div className="card p-5 w-full cursor-help">
-        <p className="text-[12px] font-medium text-text-secondary uppercase tracking-wider">
+      <div className="card p-4 sm:p-5 w-full cursor-help">
+        <p className="text-[11px] sm:text-[12px] font-medium text-text-secondary uppercase tracking-wider">
           {label}
         </p>
-        <p className="mt-2 text-[28px] font-semibold tracking-tight text-text-primary">
+        <p className="mt-1.5 sm:mt-2 text-[22px] sm:text-[28px] font-semibold tracking-tight text-text-primary">
           {value}
         </p>
       </div>
@@ -345,7 +356,7 @@ function RejectionsSection({
   total: number;
 }) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 gap-3 sm:gap-3 lg:grid-cols-2">
       <Section title="Rejections by stage">
         {total === 0 ? (
           <p className="text-[13px] text-text-muted">No rejections yet.</p>
@@ -452,8 +463,8 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="card p-6">
-      <h3 className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-text-muted mb-5">
+    <section className="card p-4 sm:p-6">
+      <h3 className="flex items-center gap-2 text-[11px] sm:text-[12px] font-semibold uppercase tracking-wider text-text-muted mb-4 sm:mb-5">
         {icon}
         {title}
       </h3>

@@ -16,6 +16,7 @@ export interface Job {
   scrapedAt: string;
   isRelevant: boolean;
   matchedKeywords?: string[];
+  source: "company" | "dou" | "djinni";
 }
 
 // ==========================================
