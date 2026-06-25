@@ -6,6 +6,20 @@ import { JobCandidate, JobSource, SourceOptions, SourceProgressEvent } from "./t
 const DOU_RSS_URL = "https://jobs.dou.ua/vacancies/feeds/";
 const MAX_AGE_DAYS = 30;
 
+/** Strip HTML tags and decode entities */
+function stripHtml(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /**
  * Known DOU categories. Target keywords from the profile are matched
  * against this list to request category-specific RSS feeds.
@@ -155,7 +169,7 @@ export class DouSource implements JobSource {
       candidates.push({
         title: parsed.position,
         url: item.link,
-        description: item.description || "",
+        description: stripHtml(item.description || ""),
         companyName: parsed.company,
         source: "dou",
       });

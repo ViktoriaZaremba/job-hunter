@@ -6,6 +6,52 @@ import { supabase } from "@/lib/supabase";
 import { JobCandidate, JobSource, SourceOptions, SourceProgressEvent } from "./types";
 
 /**
+ * Clean a job title extracted from an <a> tag.
+ * Career pages often concatenate metadata (location, type, department)
+ * from child spans into one text string:
+ *   "Project Manager NPIOn-site — Full-timeKyiv / Zakarpattia"
+ *
+ * Strategy:
+ * 1. Split on common separators: " — ", " - ", " · ", " | "
+ * 2. Remove known metadata patterns (locations, job types)
+ * 3. Take only the first meaningful segment
+ */
+function cleanJobTitle(raw: string): string {
+  // Normalize whitespace
+  let title = raw.replace(/\s+/g, " ").trim();
+
+  // Split on common visual separators
+  const separators = / — | – | \| | · /;
+  const parts = title.split(separators);
+  if (parts.length > 1) {
+    title = parts[0].trim();
+  }
+
+  // Remove trailing metadata patterns that got concatenated without separator
+  // e.g., "Project Manager NPIOn-site" or "Senior PMFull-time"
+  const metadataPatterns = [
+    /(?:On-site|Remote|Hybrid|Full-time|Part-time|Contract|Temporary|Internship).*$/i,
+    /(?:Kyiv|Київ|Lviv|Львів|Odesa|Одеса|Dnipro|Дніпро|Kharkiv|Харків|Zakarpattia|Ukraine|Україна|Warsaw|Berlin|London|New York|San Francisco).*$/i,
+  ];
+
+  for (const pattern of metadataPatterns) {
+    // Only apply if removing the match still leaves a reasonable title (>10 chars)
+    const cleaned = title.replace(pattern, "").trim();
+    if (cleaned.length >= 10) {
+      title = cleaned;
+    }
+  }
+
+  // Remove "Apply" / "Apply now" at end
+  title = title.replace(/\s*Apply\s*(now)?$/i, "").trim();
+
+  // Remove trailing special chars
+  title = title.replace(/[\s\-—–|·]+$/, "").trim();
+
+  return title || raw.trim();
+}
+
+/**
  * CompanyPagesSource — scrapes career pages of user-selected companies.
  * Uses standard HTML parser (cheerio) first, AI fallback if nothing found.
  */
@@ -133,6 +179,10 @@ export class CompanyPagesSource implements JobSource {
         );
         if (!hasTarget) continue;
 
+        // Clean title: career page links often concatenate metadata
+        // (location, job type, department) from child elements.
+        const cleanedTitle = cleanJobTitle(text);
+
         if (
           href.startsWith("#") ||
           href.startsWith("mailto:") ||
@@ -151,8 +201,8 @@ export class CompanyPagesSource implements JobSource {
           }
         }
 
-        if (jobs.some((j) => j.url === fullUrl || j.title === text)) continue;
-        jobs.push({ title: text, url: fullUrl, companyName: company.name, source: "company" });
+        if (jobs.some((j) => j.url === fullUrl || j.title === cleanedTitle)) continue;
+        jobs.push({ title: cleanedTitle, url: fullUrl, companyName: company.name, source: "company" });
       }
     } catch {
       /* swallow network errors */
