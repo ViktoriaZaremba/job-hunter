@@ -115,15 +115,17 @@ export class DouSource implements JobSource {
     });
 
     // Step 2: Initial filter on title (target keywords only)
-    const initialFiltered = allItems.filter((item) =>
-      profile.targetKeywords.some((k) => keywordMatches(item.title, k))
-    );
+    // Parse DOU title format: "Position в Company, City" → use only position part
+    const initialFiltered = allItems.filter((item) => {
+      const parsed = this.parseDouTitle(item.title);
+      return profile.targetKeywords.some((k) => keywordMatches(parsed.position, k));
+    });
 
-    // Check excluded on title
-    const afterExclude = initialFiltered.filter(
-      (item) =>
-        !profile.excludedKeywords.some((k) => keywordMatches(item.title, k))
-    );
+    // Check excluded on title (position part only)
+    const afterExclude = initialFiltered.filter((item) => {
+      const parsed = this.parseDouTitle(item.title);
+      return !profile.excludedKeywords.some((k) => keywordMatches(parsed.position, k));
+    });
 
     onProgress({
       type: "progress",
@@ -133,7 +135,8 @@ export class DouSource implements JobSource {
       total: afterExclude.length,
     });
 
-    // Step 3 & 4: Fetch vacancy pages for full description
+    // Step 3 & 4: No page fetching — DOU blocks automated requests.
+    // Use RSS data only (title parsed into position + company, RSS description).
     const candidates: JobCandidate[] = [];
 
     for (let i = 0; i < afterExclude.length; i++) {
@@ -147,30 +150,15 @@ export class DouSource implements JobSource {
         message: item.title,
       });
 
-      let description = item.description || "";
-      let companyName = "";
+      const parsed = this.parseDouTitle(item.title);
 
-      try {
-        const page = await this.fetchVacancyPage(item.link);
-        if (page.description) description = page.description;
-        if (page.companyName) companyName = page.companyName;
-      } catch {
-        // Use RSS description as fallback
-      }
-
-      // Full filtering with description will be done by evaluateJob in orchestrator
       candidates.push({
-        title: item.title,
+        title: parsed.position,
         url: item.link,
-        description,
-        companyName: companyName || this.extractCompanyFromTitle(item.title),
+        description: item.description || "",
+        companyName: parsed.company,
         source: "dou",
       });
-
-      // Small delay to be polite to DOU
-      if (i < afterExclude.length - 1) {
-        await new Promise((r) => setTimeout(r, 300));
-      }
     }
 
     return candidates;
@@ -213,50 +201,19 @@ export class DouSource implements JobSource {
     return items;
   }
 
-  private async fetchVacancyPage(
-    url: string
-  ): Promise<{ description: string; companyName: string }> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
-      },
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-
-    if (!res.ok) return { description: "", companyName: "" };
-
-    const html = await res.text();
-    const $ = cheerio.load(html);
-
-    // DOU vacancy page structure
-    const description =
-      $(".b-vacancy .vacancy-section .text").text().trim() ||
-      $(".vacancy-description").text().trim() ||
-      $(".b-typo").text().trim() ||
-      "";
-
-    const companyName =
-      $(".b-vacancy .info .company").text().trim() ||
-      $("a.company").text().trim() ||
-      "";
-
-    return {
-      description: description.substring(0, 3000), // cap for memory
-      companyName,
-    };
-  }
-
   /**
-   * Fallback: extract company name from DOU title format "Position в Company"
+   * Parse DOU RSS title format:
+   *   "Position в Company, City, Remote"
+   *   "Position в Company"
+   * Returns { position, company }
    */
-  private extractCompanyFromTitle(title: string): string {
-    // DOU titles are often "Position в Company, City" or "Position в Company"
-    const match = title.match(/ в (.+?)(?:,|$)/u);
-    return match?.[1]?.trim() ?? "";
+  private parseDouTitle(title: string): { position: string; company: string } {
+    // Match: everything before " в " = position, everything after until comma = company
+    const match = title.match(/^(.+?)\s+в\s+(.+?)(?:,\s*.+)?$/u);
+    if (match) {
+      return { position: match[1].trim(), company: match[2].trim() };
+    }
+    // Fallback: whole title is position, no company
+    return { position: title.trim(), company: "" };
   }
 }
