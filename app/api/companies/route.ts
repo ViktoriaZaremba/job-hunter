@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       careersUrl: c.careers_url,
       createdAt: c.created_at,
       isGlobal: c.is_global ?? false,
-      domain: c.domain ?? undefined,
+      domains: c.domains ?? (c.domain ? [c.domain] : []),
       companyType: c.company_type ?? undefined,
     }));
 
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
         name: body.name.trim(),
         careers_url: body.careersUrl.trim(),
         user_id: userId,
-        domain: body.domain?.trim() || null,
+        domains: body.domains ?? [],
         company_type: body.companyType?.trim() || null,
       })
       .select()

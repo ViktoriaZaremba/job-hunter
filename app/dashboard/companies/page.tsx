@@ -12,6 +12,7 @@ import {
   Edit2,
   Check,
 } from "lucide-react";
+import { TagsInput } from "@/components/ui/TagsInput";
 
 interface CompanyWithMeta extends Company {
   isGlobal?: boolean;
@@ -229,10 +230,12 @@ function CompanyCard({
           <p className="text-[14px] sm:text-[15px] font-medium text-text-primary truncate">
             {company.name}
           </p>
-          {company.domain && (
-            <span className="pill bg-ink-50 text-ink-600 text-[10px]">
-              {company.domain}
-            </span>
+          {company.domains && company.domains.length > 0 && (
+            company.domains.map((d) => (
+              <span key={d} className="pill bg-ink-50 text-ink-600 text-[10px]">
+                {d}
+              </span>
+            ))
           )}
           {company.companyType && (
             <span className="pill bg-teal-50 text-teal-600 text-[10px]">
@@ -329,13 +332,13 @@ function CompanyFormModal({
 }: {
   mode: "add" | "edit";
   initial?: CompanyWithMeta;
-  onSubmit: (data: { name: string; careersUrl: string; domain?: string; companyType?: string }) => void;
+  onSubmit: (data: { name: string; careersUrl: string; domains?: string[]; companyType?: string }) => void;
   onClose: () => void;
 }) {
   const [formData, setFormData] = useState({
     name: initial?.name ?? "",
     careersUrl: initial?.careersUrl ?? "",
-    domain: initial?.domain ?? "",
+    domains: initial?.domains ?? [],
     companyType: initial?.companyType ?? "",
   });
 
@@ -345,7 +348,7 @@ function CompanyFormModal({
     onSubmit({
       name: formData.name,
       careersUrl: formData.careersUrl,
-      domain: formData.domain.trim() || undefined,
+      domains: formData.domains.length > 0 ? formData.domains : undefined,
       companyType: formData.companyType.trim() || undefined,
     });
   };
@@ -402,20 +405,17 @@ function CompanyFormModal({
               }
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[12px] font-medium text-text-secondary mb-1.5">
-                Domain
+                Domains
               </label>
-              <input
-                type="text"
-                className="input"
-                placeholder="e.g., AI, SaaS, FinTech"
-                value={formData.domain}
-                onChange={(e) =>
-                  setFormData({ ...formData, domain: e.target.value })
-                }
+              <TagsInput
+                value={formData.domains}
+                onChange={(tags) => setFormData({ ...formData, domains: tags })}
+                placeholder="AI, SaaS, FinTech..."
               />
+              <p className="text-[11px] text-text-muted mt-1">Press Enter to add</p>
             </div>
             <div>
               <label className="block text-[12px] font-medium text-text-secondary mb-1.5">

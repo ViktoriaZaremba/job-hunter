@@ -97,7 +97,7 @@ export async function PATCH(
     const updates: any = {};
     if (body.name !== undefined) updates.name = body.name;
     if (body.careersUrl !== undefined) updates.careers_url = body.careersUrl;
-    if (body.domain !== undefined) updates.domain = body.domain || null;
+    if (body.domains !== undefined) updates.domains = body.domains;
     if (body.companyType !== undefined) updates.company_type = body.companyType || null;
 
     if (Object.keys(updates).length === 0) {
