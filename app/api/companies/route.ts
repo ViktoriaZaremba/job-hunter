@@ -51,6 +51,8 @@ export async function GET(request: NextRequest) {
       careersUrl: c.careers_url,
       createdAt: c.created_at,
       isGlobal: c.is_global ?? false,
+      domain: c.domain ?? undefined,
+      companyType: c.company_type ?? undefined,
     }));
 
     return NextResponse.json(transformed);
@@ -93,6 +95,8 @@ export async function POST(request: NextRequest) {
         name: body.name.trim(),
         careers_url: body.careersUrl.trim(),
         user_id: userId,
+        domain: body.domain?.trim() || null,
+        company_type: body.companyType?.trim() || null,
       })
       .select()
       .single();

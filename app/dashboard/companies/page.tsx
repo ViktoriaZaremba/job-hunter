@@ -225,9 +225,21 @@ function CompanyCard({
       </span>
 
       <div className="min-w-0 flex-1">
-        <p className="text-[14px] sm:text-[15px] font-medium text-text-primary truncate">
-          {company.name}
-        </p>
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-[14px] sm:text-[15px] font-medium text-text-primary truncate">
+            {company.name}
+          </p>
+          {company.domain && (
+            <span className="pill bg-ink-50 text-ink-600 text-[10px]">
+              {company.domain}
+            </span>
+          )}
+          {company.companyType && (
+            <span className="pill bg-teal-50 text-teal-600 text-[10px]">
+              {company.companyType}
+            </span>
+          )}
+        </div>
         <a
           href={company.careersUrl}
           target="_blank"
@@ -317,18 +329,25 @@ function CompanyFormModal({
 }: {
   mode: "add" | "edit";
   initial?: CompanyWithMeta;
-  onSubmit: (data: { name: string; careersUrl: string }) => void;
+  onSubmit: (data: { name: string; careersUrl: string; domain?: string; companyType?: string }) => void;
   onClose: () => void;
 }) {
   const [formData, setFormData] = useState({
     name: initial?.name ?? "",
     careersUrl: initial?.careersUrl ?? "",
+    domain: initial?.domain ?? "",
+    companyType: initial?.companyType ?? "",
   });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.careersUrl.trim()) return;
-    onSubmit(formData);
+    onSubmit({
+      name: formData.name,
+      careersUrl: formData.careersUrl,
+      domain: formData.domain.trim() || undefined,
+      companyType: formData.companyType.trim() || undefined,
+    });
   };
 
   return (
@@ -382,6 +401,40 @@ function CompanyFormModal({
                 setFormData({ ...formData, careersUrl: e.target.value })
               }
             />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[12px] font-medium text-text-secondary mb-1.5">
+                Domain
+              </label>
+              <input
+                type="text"
+                className="input"
+                placeholder="e.g., AI, SaaS, FinTech"
+                value={formData.domain}
+                onChange={(e) =>
+                  setFormData({ ...formData, domain: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <label className="block text-[12px] font-medium text-text-secondary mb-1.5">
+                Type
+              </label>
+              <select
+                className="input"
+                value={formData.companyType}
+                onChange={(e) =>
+                  setFormData({ ...formData, companyType: e.target.value })
+                }
+              >
+                <option value="">—</option>
+                <option value="Product">Product</option>
+                <option value="Outsource">Outsource</option>
+                <option value="Agency">Agency</option>
+                <option value="Startup">Startup</option>
+              </select>
+            </div>
           </div>
           <div className="flex gap-3 pt-2">
             <button

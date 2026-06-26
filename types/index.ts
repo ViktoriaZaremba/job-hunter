@@ -3,6 +3,9 @@ export interface Company {
   name: string;
   careersUrl: string;
   createdAt: string;
+  domain?: string;
+  companyType?: string;
+  isGlobal?: boolean;
 }
 
 export interface Job {
