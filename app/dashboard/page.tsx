@@ -90,6 +90,27 @@ export default function Dashboard() {
     }
   };
 
+  const handleDismissFollowup = async (id: string) => {
+    try {
+      const res = await fetch(`/api/applications/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          op: "patch_fields",
+          fields: { followupDismissedAt: new Date().toISOString() },
+        }),
+      });
+      if (res.ok) {
+        const { data } = await res.json();
+        setApplications((prev) =>
+          prev.map((app) => (app.id === id ? { ...app, ...data } : app))
+        );
+      }
+    } catch (error) {
+      console.error("Error dismissing followup:", error);
+    }
+  };
+
   const handleAddApplication = async (formData: Partial<Application>) => {
     try {
       const res = await fetch("/api/applications", {
@@ -142,6 +163,7 @@ export default function Dashboard() {
             applications={applications}
             pipeline={pipeline}
             onCardClick={(app) => setSelectedApp(app)}
+            onDismissFollowup={handleDismissFollowup}
           />
           <PipelineBoard
             pipeline={pipeline}

@@ -140,6 +140,9 @@ export interface Application {
   lastContactDate?: string;
   businessDaysSinceContact?: number;
 
+  // Follow-up dismiss
+  followupDismissedAt?: string;
+
   createdAt: string;
   updatedAt: string;
 }

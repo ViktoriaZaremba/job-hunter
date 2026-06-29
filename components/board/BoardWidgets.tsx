@@ -85,8 +85,15 @@ function aggregate(applications: Application[], pipeline: Pipeline): Aggregates 
       const days = app.lastContactDate
         ? getBusinessDaysSinceContact(app.lastContactDate)
         : 0;
-      if (days > 14) critical14.push(app);
-      else if (days > 7) warning7.push(app);
+
+      // Check if followup was dismissed (and not reset by new contact)
+      const isDismissed = app.followupDismissedAt && app.lastContactDate &&
+        new Date(app.followupDismissedAt) >= new Date(app.lastContactDate);
+
+      if (!isDismissed) {
+        if (days > 14) critical14.push(app);
+        else if (days > 7) warning7.push(app);
+      }
 
       // Upcoming = currently in interview stage with substatus "Scheduled / Sent"
       if (isInterviewStage(app, pipeline)) {
@@ -115,12 +122,14 @@ interface BoardWidgetsProps {
   applications: Application[];
   pipeline: Pipeline;
   onCardClick: (app: Application) => void;
+  onDismissFollowup?: (appId: string) => void;
 }
 
 export function BoardWidgets({
   applications,
   pipeline,
   onCardClick,
+  onDismissFollowup,
 }: BoardWidgetsProps) {
   const agg = aggregate(applications, pipeline);
   const hasAlerts = agg.warning7.length > 0 || agg.critical14.length > 0;
@@ -132,7 +141,7 @@ export function BoardWidgets({
   return (
     <div className="space-y-5 mb-8">
       <QuickStats agg={agg} pipeline={pipeline} />
-      {hasAlerts && <Alerts agg={agg} onCardClick={onCardClick} />}
+      {hasAlerts && <Alerts agg={agg} onCardClick={onCardClick} onDismissFollowup={onDismissFollowup} />}
       {hasFocus && <TodaysFocus agg={agg} pipeline={pipeline} onCardClick={onCardClick} />}
     </div>
   );
@@ -185,9 +194,11 @@ function StatCard({
 function Alerts({
   agg,
   onCardClick,
+  onDismissFollowup,
 }: {
   agg: Aggregates;
   onCardClick: (app: Application) => void;
+  onDismissFollowup?: (appId: string) => void;
 }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -201,6 +212,7 @@ function Alerts({
           subtitle="No response for 7+ business days"
           apps={agg.warning7}
           onCardClick={onCardClick}
+          onDismiss={onDismissFollowup}
         />
       )}
       {agg.critical14.length > 0 && (
@@ -213,6 +225,7 @@ function Alerts({
           subtitle="No response for 14+ business days"
           apps={agg.critical14}
           onCardClick={onCardClick}
+          onDismiss={onDismissFollowup}
         />
       )}
     </div>
@@ -226,6 +239,7 @@ function AlertCard({
   subtitle,
   apps,
   onCardClick,
+  onDismiss,
 }: {
   tone: "warning" | "critical";
   icon: React.ReactNode;
@@ -233,6 +247,7 @@ function AlertCard({
   subtitle: string;
   apps: Application[];
   onCardClick: (app: Application) => void;
+  onDismiss?: (appId: string) => void;
 }) {
   const toneStyles =
     tone === "warning"
@@ -265,13 +280,26 @@ function AlertCard({
 
           <div className="mt-3 flex flex-wrap gap-1.5">
             {apps.slice(0, 6).map((app) => (
-              <button
-                key={app.id}
-                onClick={() => onCardClick(app)}
-                className={`pill border ${toneStyles.chip} transition cursor-pointer`}
-              >
-                {app.companyName}
-              </button>
+              <div key={app.id} className="inline-flex items-center gap-0.5">
+                <button
+                  onClick={() => onCardClick(app)}
+                  className={`pill border ${toneStyles.chip} transition cursor-pointer`}
+                >
+                  {app.companyName}
+                </button>
+                {onDismiss && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDismiss(app.id);
+                    }}
+                    className="text-[10px] text-text-muted hover:text-text-secondary px-1 py-0.5 rounded hover:bg-muted transition"
+                    title="No contact available — dismiss"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
             ))}
             {apps.length > 6 && (
               <span className="pill bg-surface text-text-muted border border-line">

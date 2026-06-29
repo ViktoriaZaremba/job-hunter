@@ -40,6 +40,9 @@ export function dbToApplication(dbApp: any): Application {
     // Dates
     lastContactDate: dbApp.last_contact_date ?? undefined,
 
+    // Follow-up
+    followupDismissedAt: dbApp.followup_dismissed_at ?? undefined,
+
     createdAt: dbApp.created_at,
     updatedAt: dbApp.updated_at,
   };
@@ -80,6 +83,8 @@ export function applicationToDb(app: Partial<Application>): any {
 
   if (app.lastContactDate !== undefined)
     dbApp.last_contact_date = app.lastContactDate;
+  if (app.followupDismissedAt !== undefined)
+    dbApp.followup_dismissed_at = app.followupDismissedAt;
 
   return dbApp;
 }
