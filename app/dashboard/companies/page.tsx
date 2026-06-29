@@ -13,6 +13,7 @@ import {
   Check,
 } from "lucide-react";
 import { TagsInput } from "@/components/ui/TagsInput";
+import { ComboTagsInput } from "@/components/ui/ComboTagsInput";
 
 interface CompanyWithMeta extends Company {
   isGlobal?: boolean;
@@ -108,6 +109,27 @@ export default function CompaniesPage() {
     c.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Collect all unique domains from existing companies for suggestions
+  // Include domains from scraper scope (global + own) for richer suggestions
+  const [allDomainSuggestions, setAllDomainSuggestions] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetch("/api/companies?scope=scraper")
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: CompanyWithMeta[]) => {
+        const domains = Array.from(
+          new Set(data.flatMap((c) => c.domains ?? []))
+        ).sort();
+        setAllDomainSuggestions(domains);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Merge local + global for display
+  const allDomains = allDomainSuggestions.length > 0
+    ? allDomainSuggestions
+    : Array.from(new Set(companies.flatMap((c) => c.domains ?? []))).sort();
+
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -163,6 +185,7 @@ export default function CompaniesPage() {
         <CompanyFormModal
           mode={formMode.kind}
           initial={formMode.kind === "edit" ? formMode.company : undefined}
+          domainSuggestions={allDomains}
           onSubmit={(data) => {
             if (formMode.kind === "add") handleAdd(data);
             else handleEdit(formMode.company.id, data);
@@ -327,11 +350,13 @@ function EmptyCompanies({ onAdd }: { onAdd: () => void }) {
 function CompanyFormModal({
   mode,
   initial,
+  domainSuggestions,
   onSubmit,
   onClose,
 }: {
   mode: "add" | "edit";
   initial?: CompanyWithMeta;
+  domainSuggestions: string[];
   onSubmit: (data: { name: string; careersUrl: string; domains?: string[]; companyType?: string }) => void;
   onClose: () => void;
 }) {
@@ -410,12 +435,12 @@ function CompanyFormModal({
               <label className="block text-[12px] font-medium text-text-secondary mb-1.5">
                 Domains
               </label>
-              <TagsInput
+              <ComboTagsInput
                 value={formData.domains}
                 onChange={(tags) => setFormData({ ...formData, domains: tags })}
-                placeholder="AI, SaaS, FinTech..."
+                suggestions={domainSuggestions}
+                placeholder="Select or type domain..."
               />
-              <p className="text-[11px] text-text-muted mt-1">Press Enter to add</p>
             </div>
             <div>
               <label className="block text-[12px] font-medium text-text-secondary mb-1.5">
