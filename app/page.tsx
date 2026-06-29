@@ -7,7 +7,7 @@ export default function Home() {
       <div className="max-w-5xl mx-auto px-6 py-24">
         <div className="text-center max-w-3xl mx-auto">
           <span className="pill bg-muted text-text-secondary mb-6">
-            Personal ATS for project managers
+            Personal ATS for tech professionals
           </span>
           <h1 className="text-display text-text-primary tracking-tight">
             A calm workspace for your job search.
