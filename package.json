@@ -18,7 +18,8 @@
     "migrate:csv:apply": "tsx scripts/migrate-applications-csv.ts --apply",
     "migrate:state-model": "tsx scripts/migrate-state-model.ts",
     "migrate:state-model:apply": "tsx scripts/migrate-state-model.ts --apply",
-    "test:resolver": "tsx scripts/test-pipeline-resolver.ts"
+    "test:resolver": "tsx scripts/test-pipeline-resolver.ts",
+    "test:e2e": "npx playwright test"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -42,6 +43,7 @@
     "tailwind-merge": "^2.3.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/node": "^20.12.12",
     "@types/react": "^18.3.2",
     "@types/react-beautiful-dnd": "^13.1.8",
