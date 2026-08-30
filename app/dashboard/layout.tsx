@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { LogOut, Menu, X } from "lucide-react";
+import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { useState } from "react";
 
 function DashboardHeader() {
@@ -143,6 +144,7 @@ export default function DashboardLayout({
       <div className="min-h-screen bg-canvas">
         <DashboardHeader />
         <main>{children}</main>
+        <FeedbackWidget />
       </div>
     </SessionProvider>
   );
