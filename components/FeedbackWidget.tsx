@@ -137,7 +137,7 @@ export function FeedbackWidget() {
                     Thanks for the feedback!
                   </p>
                   <p className="text-[13px] text-text-secondary mt-1">
-                    We'll take a look and get back to you if needed.
+                    We&apos;ll take a look and get back to you if needed.
                   </p>
                 </div>
                 <button
