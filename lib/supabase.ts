@@ -3,7 +3,22 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
+/**
+ * Public (anon) client — safe to use in the browser.
+ * With RLS enabled this client can only access rows allowed by policies.
+ */
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+/**
+ * Server-side admin client — bypasses RLS entirely.
+ * ONLY import this in API routes / server components, NEVER in client code.
+ * Uses SUPABASE_SERVICE_ROLE_KEY which must stay secret.
+ */
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+if (!serviceRoleKey) {
+  throw new Error("SUPABASE_SERVICE_ROLE_KEY is not set");
+}
+export const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
 // SQL для створення таблиць в Supabase
 export const createTablesSQL = `
