@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin as supabase } from "@/lib/supabase";
 import { evaluateJob } from "@/lib/search-filter";
 import {
   getProfileForScrape,
@@ -56,6 +56,8 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  const userId = user.id;
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -109,7 +111,7 @@ export async function POST(request: NextRequest) {
 
           // Filter + save
           for (const cand of candidates) {
-            const saved = await filterAndSave(cand, profile, sendEvent);
+            const saved = await filterAndSave(cand, profile, userId, sendEvent);
             if (saved) {
               companyJobsFound++;
               totalFound++;
@@ -156,7 +158,7 @@ export async function POST(request: NextRequest) {
 
           // Filter + save
           for (const cand of douCandidates) {
-            const saved = await filterAndSave(cand, profile, sendEvent);
+            const saved = await filterAndSave(cand, profile, userId, sendEvent);
             if (saved) {
               douJobsFound++;
               totalFound++;
@@ -209,6 +211,7 @@ export async function POST(request: NextRequest) {
 async function filterAndSave(
   cand: JobCandidate,
   profile: SearchProfile,
+  userId: string,
   _sendEvent: (data: any) => void
 ): Promise<boolean> {
   const result = evaluateJob(
@@ -221,6 +224,7 @@ async function filterAndSave(
 
   const { error } = await supabase.from("jobs").upsert(
     {
+      user_id: userId,
       company_name: cand.companyName || "",
       title: cand.title,
       url: cand.url,
@@ -230,7 +234,7 @@ async function filterAndSave(
       matched_keywords: result.matchedKeywords,
       source: cand.source,
     },
-    { onConflict: "url", ignoreDuplicates: false }
+    { onConflict: "user_id,url", ignoreDuplicates: false }
   );
 
   return !error;
