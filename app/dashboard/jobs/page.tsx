@@ -9,6 +9,9 @@ import {
   Plus,
   Sparkles,
   Trash2,
+  CheckSquare,
+  Square,
+  X,
 } from "lucide-react";
 import { ScraperModal } from "@/components/ScraperModal";
 import { ProfileFormModal } from "@/components/ProfileFormModal";
@@ -33,6 +36,11 @@ export default function JobsPage() {
   const [showScraperModal, setShowScraperModal] = useState(false);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [profiles, setProfiles] = useState<SearchProfile[]>([]);
+
+  // Bulk selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkConfirmDelete, setBulkConfirmDelete] = useState(false);
 
   // Profile form modal state
   const [profileForm, setProfileForm] = useState<
@@ -60,6 +68,12 @@ export default function JobsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobs, relevanceFilter, searchQuery]);
 
+  // Clear selection when filter changes
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setBulkConfirmDelete(false);
+  }, [relevanceFilter, searchQuery]);
+
   const fetchJobs = async () => {
     try {
       const res = await fetch("/api/jobs");
@@ -73,7 +87,6 @@ export default function JobsPage() {
 
   const fetchCompanies = async () => {
     try {
-      // For scraper modal: user's own + global pool
       const res = await fetch("/api/companies?scope=scraper");
       if (res.ok) setCompanies(await res.json());
     } catch (error) {
@@ -228,12 +241,82 @@ export default function JobsPage() {
       const res = await fetch(`/api/jobs/${id}`, { method: "DELETE" });
       if (res.ok) {
         setJobs((prev) => prev.filter((j) => j.id !== id));
+        setSelectedIds((prev) => { const s = new Set(prev); s.delete(id); return s; });
         return true;
       }
       return false;
     } catch (error) {
       console.error("Error deleting job:", error);
       return false;
+    }
+  };
+
+  /* ============================================================
+   * Bulk selection helpers
+   * ============================================================ */
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const s = new Set(prev);
+      s.has(id) ? s.delete(id) : s.add(id);
+      return s;
+    });
+    setBulkConfirmDelete(false);
+  };
+
+  const allVisibleSelected =
+    filteredJobs.length > 0 &&
+    filteredJobs.every((j) => selectedIds.has(j.id));
+
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredJobs.map((j) => j.id)));
+    }
+    setBulkConfirmDelete(false);
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setBulkConfirmDelete(false);
+  };
+
+  /* Bulk delete */
+  const bulkDelete = async () => {
+    if (bulkBusy || selectedIds.size === 0) return;
+    setBulkBusy(true);
+    try {
+      const ids = Array.from(selectedIds);
+      const res = await fetch("/api/jobs/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (res.ok) {
+        setJobs((prev) => prev.filter((j) => !selectedIds.has(j.id)));
+        setSelectedIds(new Set());
+        setBulkConfirmDelete(false);
+      }
+    } catch (error) {
+      console.error("Error bulk deleting:", error);
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  /* Bulk add to applications */
+  const bulkAddToApplications = async () => {
+    if (bulkBusy || selectedIds.size === 0) return;
+    setBulkBusy(true);
+    try {
+      const selected = filteredJobs.filter((j) => selectedIds.has(j.id));
+      await Promise.all(selected.map((job) => addToApplications(job)));
+      setSelectedIds(new Set());
+    } catch (error) {
+      console.error("Error bulk adding:", error);
+    } finally {
+      setBulkBusy(false);
     }
   };
 
@@ -385,10 +468,87 @@ export default function JobsPage() {
           onChange={setRelevanceFilter}
         />
 
-        <div className="md:ml-auto text-[13px] text-text-muted px-2">
-          {filteredJobs.length} of {jobs.length}
+        <div className="md:ml-auto flex items-center gap-3">
+          {/* Select all toggle */}
+          {filteredJobs.length > 0 && (
+            <button
+              onClick={toggleSelectAll}
+              className="inline-flex items-center gap-1.5 text-[13px] text-text-secondary hover:text-text-primary transition"
+            >
+              {allVisibleSelected ? (
+                <CheckSquare size={16} className="text-ink" />
+              ) : (
+                <Square size={16} />
+              )}
+              {allVisibleSelected ? "Deselect all" : "Select all"}
+            </button>
+          )}
+          <span className="text-[13px] text-text-muted">
+            {filteredJobs.length} of {jobs.length}
+          </span>
         </div>
       </div>
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="mb-5 flex items-center gap-3 px-4 py-3 bg-ink/5 border border-ink/15 rounded-2xl">
+          <span className="text-[13px] font-medium text-text-primary">
+            {selectedIds.size} selected
+          </span>
+
+          <div className="flex items-center gap-2 ml-auto">
+            <button
+              onClick={bulkAddToApplications}
+              disabled={bulkBusy}
+              className="btn-secondary"
+            >
+              <Plus size={14} />
+              Add to To-do
+            </button>
+
+            {bulkConfirmDelete ? (
+              <>
+                <span className="text-[12px] text-text-secondary hidden sm:inline">
+                  Delete {selectedIds.size} jobs?
+                </span>
+                <button
+                  onClick={() => setBulkConfirmDelete(false)}
+                  disabled={bulkBusy}
+                  className="btn-secondary"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={bulkDelete}
+                  disabled={bulkBusy}
+                  className="btn-danger"
+                >
+                  <Trash2 size={14} />
+                  {bulkBusy ? "Deleting..." : "Delete"}
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setBulkConfirmDelete(true)}
+                disabled={bulkBusy}
+                className="btn-ghost text-text-muted hover:text-clay"
+              >
+                <Trash2 size={14} />
+                Delete
+              </button>
+            )}
+
+            <button
+              onClick={clearSelection}
+              disabled={bulkBusy}
+              className="btn-ghost h-9 w-9 p-0 text-text-muted"
+              aria-label="Clear selection"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Live progress */}
       {scraping && (
@@ -450,6 +610,8 @@ export default function JobsPage() {
               key={job.id}
               job={job}
               index={idx + 1}
+              selected={selectedIds.has(job.id)}
+              onToggleSelect={() => toggleSelect(job.id)}
               onAdd={() => addToApplications(job)}
               onDelete={() => deleteJob(job.id)}
             />
@@ -513,11 +675,15 @@ function SegmentedFilter({
 function JobCard({
   job,
   index,
+  selected,
+  onToggleSelect,
   onAdd,
   onDelete,
 }: {
   job: Job;
   index: number;
+  selected: boolean;
+  onToggleSelect: () => void;
   onAdd: () => Promise<boolean>;
   onDelete: () => Promise<boolean>;
 }) {
@@ -549,12 +715,28 @@ function JobCard({
   };
 
   return (
-    <div className="card p-5 hover:border-ink/20 transition">
+    <div
+      className={`card p-5 hover:border-ink/20 transition ${
+        selected ? "border-ink/30 bg-ink/[0.02]" : ""
+      }`}
+    >
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0 flex-1 flex items-start gap-3">
-          <span className="shrink-0 w-7 h-7 rounded-full bg-muted text-text-muted text-[12px] font-semibold inline-flex items-center justify-center tabular-nums">
-            {index}
-          </span>
+          {/* Checkbox / index badge */}
+          <button
+            onClick={onToggleSelect}
+            className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition hover:bg-muted"
+            aria-label={selected ? "Deselect" : "Select"}
+          >
+            {selected ? (
+              <CheckSquare size={16} className="text-ink" />
+            ) : (
+              <span className="w-7 h-7 rounded-full bg-muted text-text-muted text-[12px] font-semibold inline-flex items-center justify-center tabular-nums">
+                {index}
+              </span>
+            )}
+          </button>
+
           <div className="min-w-0 flex-1">
             <h3 className="text-[16px] font-semibold text-text-primary truncate">
               {job.title}
@@ -571,9 +753,7 @@ function JobCard({
           </div>
         </div>
 
-        {isRelevant && (
-          <RelevantBadge matched={matched} />
-        )}
+        {isRelevant && <RelevantBadge matched={matched} />}
         {job.source && job.source !== "company" && (
           <span className="pill bg-ink-50 text-ink-600 shrink-0 text-[11px]">
             {sourceLabel[job.source] ?? job.source}
